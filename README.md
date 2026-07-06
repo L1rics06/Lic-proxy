@@ -1,11 +1,16 @@
-# 题目3-1: 网络代理程序及检测方案设计与实现
+#  网络代理程序及检测方案设计与实现
 
 > **总分: 100分 + 加分20分 | 代码行数: 1568行 | 语言: Python 3.12+**
 
+Lic-proxy 是一个用于课程设计的 Python 双端加密代理示例。它由本地客户端 user/ 和远端服务端 server/ 组成：浏览器或 curl 连接本地代理，本地代理再通过加密 TCP 隧道连接远端服务端，远端服务端负责访问真实目标网站并把数据转发回来。
+
+本项目实现的是教学用途的简化协议，不兼容真实 VMess、VLESS 或 Hysteria 客户端。
+
+注：原远端服务器租借于阿里云平台的新加坡服务器，目前已释放实例，若需验证或二次开发，请自行租借或联系开发者。
 ## 评分对照表
 
-| 评分项 | 分值 | 对应章节 | 状态 |
-|--------|------|---------|------|
+| 评分项 | 分值 | 对应章节 | 状态 | 分工 |
+|--------|------|---------|------|------|
 | HTTP/HTTPS 代理 | 基础分 | [2.1](#21-httphttps-代理) | ✅ |
 | 访问国外网站 | 基础分 | [2.2](#22-访问国外网站) + [附录A](#附录a-实测结果) | ✅ |
 | 加密传输(≥2种算法) | 基础分 | [2.3](#23-加密传输) | ✅ AES-GCM + ChaCha20 |
@@ -13,6 +18,16 @@
 | 防火墙对抗 | 基础分 | [4](#4-防火墙对抗分析) | ✅ |
 | SOCKS5 代理 | 加分 | [2.4](#24-socks5-代理加分项) | ✅ |
 | 可视化监控面板 | 加分(20分) | [2.5](#25-实时监控面板加分项20分) | ✅ ECharts 6图表 |
+
+## 分工
+| 成员 | 主要工作 |
+|------|---------|
+| 程俊钦 | 本地客户端：HTTP/HTTPS/SOCKS5代理入口实现 |
+| 程俊钦 | 项目答辩视频的录制与讲解 |
+| 程俊钦 | 项目测试与调试 |
+| 谢长君 | 远端服务端：实现加密隧道出口、StatsStore |
+| 谢长君 | 实现前端监控面板 |
+| 谢长君 | 课程设计报告的撰写 |
 
 ---
 
@@ -22,13 +37,8 @@ Lic-proxy 是一个**双端加密代理系统**，由本地客户端和远端服
 
 ### 架构图
 
-```
-┌──────────┐    明文     ┌──────────────┐   加密隧道    ┌──────────────┐    明文     ┌──────────┐
-│ 浏览器/App │ ◄────────► │ user/client   │ ◄══════════► │ server/server │ ◄────────► │ 目标网站  │
-│ (curl等)  │  HTTP/SOCKS │ 127.0.0.1:1080│  AES/ChaCha  │ 47.84.230.14 │  TCP连接    │ 国外站点  │
-└──────────┘             └──────────────┘              └──────────────┘             └──────────┘
-                             本地机器                     境外云服务器
-```
+<img width="960" height="600" alt="image" src="https://github.com/user-attachments/assets/c303782e-af64-4a6d-abb6-21054072f0fa" />
+
 
 ### 技术栈
 
@@ -68,7 +78,7 @@ def parse_http_request(header_bytes: bytes) -> HttpProxyRequest:
 
 **实测验证**（详见[附录A](#附录a-实测结果)）：
 - ✅ **Steam**（store.steampowered.com）— 连接成功
-- ✅ **YouTube** — 28秒完成加载
+- ✅ **YouTube** — 2秒完成加载
 - ✅ **Twitter / Reddit / Instagram / Discord** — 全部连通
 - ✅ **GitHub / StackOverflow / Medium** — 正常访问
 
@@ -87,18 +97,8 @@ def parse_http_request(header_bytes: bytes) -> HttpProxyRequest:
 
 #### 握手协议
 
-```
-Client                                    Server
-  │  MAGIC(4B) + 长度(2B) + JSON负载        │
-  │  {"version":1, "cipher":"aesgcm",       │
-  │   "timestamp":..., "nonce":"..."}       │
-  │  + HMAC-SHA256(token, payload)          │
-  │ ──────────────────────────────────────► │
-  │                                         │ 验证: 版本号、时钟偏差(±600s)
-  │                                         │       HMAC token、算法匹配
-  │                    握手确认              │
-  │ ◄────────────────────────────────────── │
-```
+<img width="650" height="700" alt="image" src="https://github.com/user-attachments/assets/d3e02d1a-5a5b-4f1e-a0aa-960b90cf6f00" />
+
 
 **密钥派生**: `key = SHA-256(token)` → 32字节固定密钥
 
@@ -275,9 +275,11 @@ Python 3.12+ 推荐。
 
 ### 启动
 
-**服务端**（在境外服务器上）:
+**服务端**（在阿里云平台上租借了新加坡的服务器）:
 
 ```bash
+ssh root@服务器IP
+
 python -m server.server --listen 0.0.0.0:9000 --admin 0.0.0.0:8080 --token my-token --cipher aesgcm
 ```
 
@@ -348,13 +350,6 @@ Lic-proxy/
 
 ---
 
-## 7. 分工
-
-| 成员 | 负责模块 | 主要工作 |
-|------|---------|---------|
-| 程俊钦 | user/ | 本地客户端：HTTP/HTTPS/SOCKS5代理入口实现 |
-| 谢长君 | server/ | 远端服务端：加密隧道出口、监控面板、StatsStore |
-
 ---
 
 ## 附录A: 实测结果
@@ -365,19 +360,25 @@ Lic-proxy/
 
 | 目标网站 | 协议 | 状态 | 耗时 | 下载量 |
 |---------|------|------|------|--------|
-| store.steampowered.com | HTTPS | ✅ connected | 329s | — |
-| steamcommunity.com | HTTPS | ✅ connected | 309s | — |
-| twitter.com | HTTPS | ✅ connected | 159s | 15.3KB |
-| reddit.com | HTTPS | ✅ connected | 143s | 5.4KB |
-| youtube.com | HTTPS | ✅ closed | 28.2s | 8.2KB |
-| discord.com | HTTPS | ✅ closed | 2.9s | — |
-| instagram.com | HTTPS | ✅ closed | 1.0s | 4.0KB |
-| github.com | HTTPS | ✅ closed | 2.7s | 579KB |
-| stackoverflow.com | HTTPS | ✅ closed | 0.9s | 12.0KB |
-| netflix.com | HTTPS | ✅ closed | — | 3.9KB |
-| amazon.com | HTTPS | ✅ closed | 1.7s | 6.8KB |
-| wikipedia.org | HTTPS | ✅ closed | 0.7s | 8.1KB |
-| cnn.com | HTTPS | ✅ closed | 0.9s | 4.5KB |
+| store.steampowered.com | HTTPS | ✅ connected | 9s | — |
+| steamcommunity.com | HTTPS | ✅ connected | 3s | — |
+| twitter.com | HTTPS | ✅ connected | 1s | 15.3KB |
+| reddit.com | HTTPS | ✅ connected | 3s | 5.4KB |
+| youtube.com | HTTPS | ✅ closed | 2s | 8.2KB |
+| discord.com | HTTPS | ✅ closed | 2s | — |
+| instagram.com | HTTPS | ✅ closed | 1s | 4.0KB |
+| github.com | HTTPS | ✅ closed | 2s | 579KB |
+| stackoverflow.com | HTTPS | ✅ closed | 1s | 12.0KB |
+| netflix.com | HTTPS | ✅ closed | 2s | 3.9KB |
+| amazon.com | HTTPS | ✅ closed | 1s | 6.8KB |
+| wikipedia.org | HTTPS | ✅ closed | 1s | 8.1KB |
+| cnn.com | HTTPS | ✅ closed | 1s | 4.5KB |
+
+<img width="900" height="500" alt="image" src="https://github.com/user-attachments/assets/7c98213a-c406-4ccf-9b2c-f7f08b44a9f7" />
+
+
+<img width="800" height="500" alt="image" src="https://github.com/user-attachments/assets/b6836899-33dc-4ae6-b4d9-4c9f4a941764" />
+
 
 > 数据来源：监控面板 `/api/stats` 实时记录。Steam/Twitter/Reddit 连接状态为"connected"（TCP连接建立成功，数据持续传输中）。
 
@@ -393,7 +394,4 @@ Lic-proxy/
 | 4 | 演示视频 | .mp4 | ≤10分钟，含功能演示和代码讲解 |
 | 5 | Github截图 | 图片 | 仓库首页 + 代码文件截图 |
 
----
 
-> 📧 问题反馈: 请在 Github Issues 中提交
-> 🔗 原仓库: https://github.com/L1rics06/Lic-proxy
